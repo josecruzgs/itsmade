@@ -5,6 +5,7 @@ import {
   useActionState,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -16,6 +17,10 @@ import {
   changeServiceJobStatus,
   deleteServiceJobWithPassword,
 } from "@/lib/services/actions";
+import {
+  searchCustomers,
+  type CustomerSearchResult,
+} from "@/lib/customers/actions";
 import type { ActionResult } from "@/lib/auth/actions";
 import type {
   BranchRow,
@@ -257,14 +262,25 @@ function ServiceRowItem({
   );
 }
 
-function ServiceJobModal({
+export interface ServiceJobModalInitialCustomer {
+  id?: string;
+  name: string | null;
+  company_name: string | null;
+  whatsapp_phone: string;
+  email: string | null;
+}
+
+export function ServiceJobModal({
   job,
+  initialCustomer,
   branches,
   categories,
   services,
   onClose,
 }: {
   job: ServiceJobJoined | null;
+  /** Prellena datos de cliente al crear nuevo servicio (ej: desde /clients). */
+  initialCustomer?: ServiceJobModalInitialCustomer | null;
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
@@ -275,6 +291,30 @@ function ServiceJobModal({
     isNew ? createServiceJob : updateServiceJob,
     null,
   );
+
+  // Cliente actualmente prellenado (puede venir del prop, o ser uno elegido
+  // desde el picker). El formKey se incrementa al cambiar para forzar remount
+  // de los inputs uncontrolled y que tomen el nuevo defaultValue.
+  const [pickedCustomer, setPickedCustomer] = useState<
+    ServiceJobModalInitialCustomer | null
+  >(initialCustomer ?? null);
+  const [formKey, setFormKey] = useState(0);
+
+  function handlePickCustomer(c: CustomerSearchResult) {
+    setPickedCustomer({
+      id: c.id,
+      name: c.name,
+      company_name: c.company_name,
+      whatsapp_phone: c.whatsapp_phone,
+      email: c.email,
+    });
+    setFormKey((k) => k + 1);
+  }
+
+  function handleClearCustomer() {
+    setPickedCustomer(null);
+    setFormKey((k) => k + 1);
+  }
 
   // Estado local para la cascada categoría → servicio.
   const initialServiceId = job?.service?.id ?? "";
@@ -368,30 +408,55 @@ function ServiceJobModal({
           />
         ) : null}
 
-        <form action={action} className="px-6 py-5">
+        {/* Picker de cliente existente (solo al crear nuevo). */}
+        {isNew ? (
+          <CustomerPicker
+            picked={pickedCustomer}
+            onPick={handlePickCustomer}
+            onClear={handleClearCustomer}
+          />
+        ) : null}
+
+        <form key={formKey} action={action} className="px-6 py-5">
           {!isNew ? <input type="hidden" name="id" value={job.id} /> : null}
 
           {/* === CLIENTE === */}
-          <Section title="Cliente">
+          <Section
+            title={
+              isNew && pickedCustomer
+                ? "Cliente (prellenado desde existente)"
+                : "Cliente"
+            }
+          >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field
                 name="customer_name"
                 label="Nombre completo"
                 required
-                defaultValue={job?.customer?.name ?? ""}
+                defaultValue={
+                  job?.customer?.name ?? pickedCustomer?.name ?? ""
+                }
                 placeholder="Ricardo Pérez"
               />
               <Field
                 name="customer_company"
                 label="Empresa"
-                defaultValue={job?.customer?.company_name ?? ""}
+                defaultValue={
+                  job?.customer?.company_name ??
+                  pickedCustomer?.company_name ??
+                  ""
+                }
                 placeholder="Opcional, si es cliente empresa"
               />
               <Field
                 name="customer_whatsapp"
                 label="WhatsApp"
                 required
-                defaultValue={job?.customer?.whatsapp_phone ?? ""}
+                defaultValue={
+                  job?.customer?.whatsapp_phone ??
+                  pickedCustomer?.whatsapp_phone ??
+                  ""
+                }
                 placeholder="5216861234567"
                 type="tel"
                 hint="Con código de país (sin +). Ej: 521 + 10 dígitos."
@@ -400,7 +465,9 @@ function ServiceJobModal({
                 name="customer_email"
                 label="Email"
                 type="email"
-                defaultValue={job?.customer?.email ?? ""}
+                defaultValue={
+                  job?.customer?.email ?? pickedCustomer?.email ?? ""
+                }
                 placeholder="opcional@cliente.com"
               />
             </div>
@@ -622,6 +689,170 @@ function toDatetimeLocalString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
     d.getDate(),
   )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Buscador combobox para seleccionar un cliente existente y prellenar el form.
+ * Si ya hay uno seleccionado, muestra una banda de confirmacion con boton para
+ * limpiar y volver a buscar (o crear uno nuevo a mano).
+ */
+function CustomerPicker({
+  picked,
+  onPick,
+  onClear,
+}: {
+  picked: ServiceJobModalInitialCustomer | null;
+  onPick: (c: CustomerSearchResult) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<CustomerSearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [searching, startSearch] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdown si haces click afuera.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [open]);
+
+  function handleQueryChange(v: string) {
+    setQuery(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (v.trim().length < 2) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      startSearch(async () => {
+        const r = await searchCustomers(v);
+        setResults(r);
+        setOpen(true);
+      });
+    }, 250);
+  }
+
+  function pick(c: CustomerSearchResult) {
+    onPick(c);
+    setQuery("");
+    setResults([]);
+    setOpen(false);
+  }
+
+  if (picked) {
+    return (
+      <div className="border-b border-slate-200 bg-brand-50/50 px-6 py-3 dark:border-slate-800 dark:bg-brand-500/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-brand-800 dark:text-brand-200">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span>
+              Cliente seleccionado:{" "}
+              <strong>{picked.name ?? picked.whatsapp_phone}</strong>
+              {picked.company_name ? ` · ${picked.company_name}` : ""}
+              {" "}
+              <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                {picked.whatsapp_phone}
+              </span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
+          >
+            Cambiar / nuevo cliente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative border-b border-slate-200 bg-slate-50/40 px-6 py-3 dark:border-slate-800 dark:bg-slate-800/30"
+    >
+      <label className="block">
+        <span className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          ¿Cliente existente? Búscalo aquí para prellenar
+        </span>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          onFocus={() => {
+            if (results.length > 0) setOpen(true);
+          }}
+          placeholder="Nombre, empresa, WhatsApp o email…"
+          className="field"
+        />
+        {query.trim().length > 0 && query.trim().length < 2 ? (
+          <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
+            Escribe al menos 2 caracteres.
+          </span>
+        ) : null}
+      </label>
+
+      {open ? (
+        <div className="absolute left-6 right-6 top-full z-10 mt-1 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          {searching && results.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">
+              Buscando…
+            </div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">
+              Sin resultados. Si es cliente nuevo, escribe los datos abajo.
+            </div>
+          ) : (
+            <ul className="py-1">
+              {results.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => pick(c)}
+                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition hover:bg-brand-50 dark:hover:bg-brand-500/10"
+                  >
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {c.name ?? "(sin nombre)"}
+                      {c.company_name ? (
+                        <span className="ml-1 text-slate-500 dark:text-slate-400">
+                          · {c.company_name}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                      {c.whatsapp_phone}
+                      {c.email ? ` · ${c.email}` : ""}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /**
