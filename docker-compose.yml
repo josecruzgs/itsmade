@@ -1,0 +1,123 @@
+# =============================================================================
+# itsMade — Stack local de desarrollo
+#
+# Levanta Evolution API + Postgres + Redis para que el Next.js que corre en
+# tu maquina (npm run dev en localhost:3000) reciba los webhooks vía
+# host.docker.internal:3000.
+#
+# Para PRODUCCION en el VPS, usa `docker-compose.evolution-only.yml`.
+#
+# Notas de coexistencia con TomaLab:
+#   - Si TomaLab usa el puerto 8080 (su default), itsMade usa 8082 para no
+#     chocar. Ajusta si en tu maquina ese puerto tambien esta tomado.
+#   - container_name, network y volumes estan prefijados con `itsmade-`
+#     para no colisionar.
+# =============================================================================
+
+services:
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: itsmade-evolution-api
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: http://localhost:8082
+
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_exchange
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+
+      WEBHOOK_GLOBAL_URL: ${EVOLUTION_WEBHOOK_GLOBAL_URL:-http://host.docker.internal:3000/api/webhook/evolution}
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "false"
+      WEBHOOK_EVENTS_MESSAGES_SET: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "false"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "false"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "false"
+      WEBHOOK_EVENTS_CONTACTS_SET: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "false"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_SET: "false"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "false"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_DELETE: "false"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "false"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "false"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "false"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+      WEBHOOK_EVENTS_CALL: "false"
+      WEBHOOK_EVENTS_NEW_JWT_TOKEN: "false"
+      WEBHOOK_EVENTS_TYPEBOT_START: "false"
+      WEBHOOK_EVENTS_TYPEBOT_CHANGE_STATUS: "false"
+
+      CONFIG_SESSION_PHONE_CLIENT: itsMade
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CONFIG_SESSION_PHONE_VERSION: 2.3000.1023204200
+
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#0EA5E9"
+
+      LANGUAGE: es
+      DEL_INSTANCE: "false"
+      LOG_LEVEL: ERROR,WARN,INFO,LOG
+      LOG_COLOR: "true"
+      LOG_BAILEYS: error
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_started
+
+  evolution-postgres:
+    image: postgres:16-alpine
+    container_name: itsmade-evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD}
+      POSTGRES_DB: evolution
+    volumes:
+      - itsmade_evolution_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: itsmade-evolution-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - itsmade_evolution_redis_data:/data
+
+volumes:
+  itsmade_evolution_postgres_data:
+  itsmade_evolution_redis_data:

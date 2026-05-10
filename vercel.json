@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/app/api/webhook/evolution/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/expire-feedback-requests/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/close-stale-conversations/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/(admin)/settings/page.tsx": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/expire-feedback-requests",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/close-stale-conversations",
+      "schedule": "0 10 * * *"
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+# =============================================================================
+# itsMade — Evolution API standalone (Setup hibrido: Vercel + VPS)
+#
+# Solo levanta Evolution + Postgres + Redis. Next.js corre en Vercel.
+# Evolution se expone solo en la red interna docker; un reverse proxy del
+# panel del VPS (hPanel/CyberPanel/cPanel/Plesk) o Cloudflare lo enruta a un
+# subdominio HTTPS publico (ej: evolution.itsmade.tudominio.com).
+#
+# Coexistencia con TomaLab en el mismo VPS:
+#   - Project name: levanta con `docker compose -p itsmade-evolution \
+#     -f docker-compose.evolution-only.yml up -d` para que los recursos
+#     queden bajo el namespace itsmade-evolution_*.
+#   - Container names, network y volumes estan prefijados con `itsmade-` para
+#     no colisionar con la instancia de TomaLab.
+#   - Si publicas puertos al host (ver bloque comentado), usa 8082+ porque
+#     8080/8081 estan ocupados por TomaLab.
+#
+# Vercel:
+#   - EVOLUTION_API_URL = https://evolution.itsmade.tudominio.com
+#   - El webhook entra a https://itsmade.vercel.app/api/webhook/evolution
+# =============================================================================
+
+services:
+  # Cloudflare Quick Tunnel: opcional, expone Evolution en una URL HTTPS
+  # publica sin dominio configurado. Util mientras configuras Cloudflare DNS.
+  # Lee la URL asignada con: docker compose -f docker-compose.evolution-only.yml logs cloudflared
+  # Cuando tengas dominio, comenta este servicio y usa el reverse proxy del panel.
+  #
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: itsmade-cloudflared
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate --url http://evolution-api:8080
+  #   depends_on:
+  #     evolution-api:
+  #       condition: service_started
+  #   networks:
+  #     - itsmade-net
+
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: itsmade-evolution-api
+    restart: unless-stopped
+    # NO exponemos puertos al host por defecto. El reverse proxy del panel
+    # llega via red docker (http://itsmade-evolution-api:8080) o via cloudflared.
+    # Si necesitas publicar al host, descomenta `ports` y usa 8082 (8080/8081
+    # estan tomados por TomaLab).
+    expose:
+      - "8080"
+    # ports:
+    #   - "127.0.0.1:8082:8080"
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL}
+
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_exchange
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+
+      # Webhook apunta a la URL publica de Vercel
+      WEBHOOK_GLOBAL_URL: ${VERCEL_WEBHOOK_URL}
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "true"
+      WEBHOOK_EVENTS_APPLICATION_STARTUP: "false"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "false"
+      WEBHOOK_EVENTS_MESSAGES_SET: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "false"
+      WEBHOOK_EVENTS_MESSAGES_DELETE: "false"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "false"
+      WEBHOOK_EVENTS_CONTACTS_SET: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "false"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_SET: "false"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "false"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_DELETE: "false"
+      WEBHOOK_EVENTS_GROUPS_UPSERT: "false"
+      WEBHOOK_EVENTS_GROUPS_UPDATE: "false"
+      WEBHOOK_EVENTS_GROUP_PARTICIPANTS_UPDATE: "false"
+      WEBHOOK_EVENTS_CALL: "false"
+      WEBHOOK_EVENTS_NEW_JWT_TOKEN: "false"
+      WEBHOOK_EVENTS_TYPEBOT_START: "false"
+      WEBHOOK_EVENTS_TYPEBOT_CHANGE_STATUS: "false"
+
+      CONFIG_SESSION_PHONE_CLIENT: itsMade
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      CONFIG_SESSION_PHONE_VERSION: 2.3000.1023204200
+
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#0EA5E9"
+
+      LANGUAGE: es
+      DEL_INSTANCE: "false"
+      LOG_LEVEL: ERROR,WARN,INFO,LOG
+      LOG_COLOR: "true"
+      LOG_BAILEYS: error
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_started
+    networks:
+      - itsmade-net
+
+  evolution-postgres:
+    image: postgres:16-alpine
+    container_name: itsmade-evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD}
+      POSTGRES_DB: evolution
+    volumes:
+      - itsmade_evolution_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - itsmade-net
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: itsmade-evolution-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - itsmade_evolution_redis_data:/data
+    networks:
+      - itsmade-net
+
+volumes:
+  itsmade_evolution_postgres_data:
+  itsmade_evolution_redis_data:
+
+networks:
+  itsmade-net:
+    driver: bridge
+    name: itsmade-net

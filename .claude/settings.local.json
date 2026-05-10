@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(if \\(Test-Path \"C:\\\\Users\\\\josec\\\\Documents\\\\Github\"\\) { Get-ChildItem \"C:\\\\Users\\\\josec\\\\Documents\\\\Github\" -Directory | Where-Object { $_.Name -match 'toma' } | Select-Object -ExpandProperty FullName } else { \"Github folder not found at expected path\" })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\josec\\\\Documents\\\\Github\\\\tomalab\" -Recurse -Force)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Get-ChildItem -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\josec\\\\Documents\\\\Github\\\\tomalab\" -Recurse -Directory -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ]
+  }
+}
