@@ -97,23 +97,6 @@ export function ServicesPanel({
 
   return (
     <div className="space-y-5">
-      <div className="card flex items-center justify-between gap-3 p-3">
-        <div className="text-sm text-slate-600 dark:text-slate-400">
-          {jobs.length}{" "}
-          {jobs.length === 1 ? "servicio en esta página" : "servicios en esta página"}.
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="btn-primary whitespace-nowrap"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Nuevo servicio
-        </button>
-      </div>
-
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

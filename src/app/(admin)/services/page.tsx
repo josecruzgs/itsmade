@@ -5,6 +5,8 @@ import {
   type ServiceJobJoined,
   type ServicesQueryParams,
 } from "@/components/ServicesPanel";
+import { ServicesFilters } from "@/components/ServicesFilters";
+import { NewServiceButton } from "@/components/NewServiceButton";
 import { supabaseServer } from "@/lib/supabase/server";
 import type {
   BranchRow,
@@ -17,13 +19,6 @@ import type {
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
-
-const STATUS_LABEL: Record<ServiceJobStatus, string> = {
-  scheduled: "Pendiente",
-  in_progress: "En proceso",
-  completed: "Realizado",
-  cancelled: "Cancelado",
-};
 
 type SortKey =
   | "created"
@@ -227,97 +222,78 @@ export default async function ServicesPage({
     return buildHref({ ...overrides, page: undefined });
   }
 
-  const description =
-    totalCount === 0 && !search
-      ? 'Aún no hay órdenes registradas. Crea la primera con "Nuevo servicio".'
-      : `${totalCount} ${totalCount === 1 ? "orden" : "órdenes"}${search ? ` para "${search}"` : ""} · página ${page} de ${totalPages}.`;
-
   return (
-    <AdminShell title="Servicios" description={description}>
-      {/* Search bar */}
-      <form
-        action="/services"
-        method="get"
-        className="card mb-3 flex flex-wrap items-center gap-2 p-3"
-      >
-        {sp.status && sp.status !== "all" ? (
-          <input type="hidden" name="status" value={sp.status} />
-        ) : null}
-        {sp.branch && sp.branch !== "all" ? (
-          <input type="hidden" name="branch" value={sp.branch} />
-        ) : null}
-        {sp.sort && sp.sort !== "created" ? (
-          <input type="hidden" name="sort" value={sp.sort} />
-        ) : null}
-        {sp.dir && sp.dir !== "desc" ? (
-          <input type="hidden" name="dir" value={sp.dir} />
-        ) : null}
+    <AdminShell
+      title="Servicios"
+      actions={
+        <NewServiceButton
+          branches={branches}
+          categories={categories}
+          services={services}
+        />
+      }
+    >
+      {/* Buscador + filtros: stack vertical en mobile, una fila en lg+ */}
+      <div className="card mb-4 flex flex-col gap-2 p-3 lg:flex-row lg:items-center">
+        <form
+          action="/services"
+          method="get"
+          className="flex w-full min-w-0 items-center gap-2 lg:flex-1"
+        >
+          {sp.status && sp.status !== "all" ? (
+            <input type="hidden" name="status" value={sp.status} />
+          ) : null}
+          {sp.branch && sp.branch !== "all" ? (
+            <input type="hidden" name="branch" value={sp.branch} />
+          ) : null}
+          {sp.sort && sp.sort !== "created" ? (
+            <input type="hidden" name="sort" value={sp.sort} />
+          ) : null}
+          {sp.dir && sp.dir !== "desc" ? (
+            <input type="hidden" name="dir" value={sp.dir} />
+          ) : null}
 
-        <div className="relative flex-1">
-          <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            type="search"
-            name="q"
-            defaultValue={search}
-            placeholder="Buscar cliente, empresa, WhatsApp, sucursal o servicio…"
-            className="field pl-9"
+          <div className="relative flex-1">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="search"
+              name="q"
+              defaultValue={search}
+              placeholder="Buscar cliente, empresa, WhatsApp, sucursal o servicio…"
+              className="field pl-9"
+            />
+          </div>
+
+          <button type="submit" className="btn-primary text-sm">
+            Buscar
+          </button>
+          {search ? (
+            <Link href={filterHref({ q: "" })} className="btn-ghost text-sm">
+              Limpiar
+            </Link>
+          ) : null}
+        </form>
+
+        <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+          <ServicesFilters
+            status={sp.status ?? ""}
+            branch={sp.branch ?? ""}
+            branches={branchesActiveForFilter}
           />
         </div>
-
-        <button type="submit" className="btn-primary text-sm">
-          Buscar
-        </button>
-        {search ? (
-          <Link href={filterHref({ q: "" })} className="btn-ghost text-sm">
-            Limpiar
-          </Link>
-        ) : null}
-      </form>
-
-      {/* Filter pills */}
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-        <FilterPill
-          label="Todos"
-          href={filterHref({ status: "all" })}
-          active={!sp.status || sp.status === "all"}
-        />
-        {(["scheduled", "in_progress", "completed", "cancelled"] as ServiceJobStatus[]).map(
-          (s) => (
-            <FilterPill
-              key={s}
-              label={STATUS_LABEL[s]}
-              href={filterHref({ status: s })}
-              active={sp.status === s}
-            />
-          ),
-        )}
-        <span className="ml-2 text-sm text-slate-400">|</span>
-        <FilterPill
-          label="Todas las sucursales"
-          href={filterHref({ branch: "all" })}
-          active={!sp.branch || sp.branch === "all"}
-        />
-        {branchesActiveForFilter.map((b) => (
-          <FilterPill
-            key={b.id}
-            label={b.city}
-            href={filterHref({ branch: b.id })}
-            active={sp.branch === b.id}
-          />
-        ))}
       </div>
 
       {jobsRes.error ? (
@@ -335,111 +311,103 @@ export default async function ServicesPage({
         currentParams={currentParams}
       />
 
-      {totalCount > PAGE_SIZE ? (
-        <Pagination
-          currentPage={page}
-          totalPages={totalPages}
-          totalCount={totalCount}
-          firstShown={offset + 1}
-          lastShown={offset + jobs.length}
-          hrefForPage={(p) => buildHref({ page: p > 1 ? String(p) : undefined })}
-        />
-      ) : null}
+      <TableFooter
+        totalCount={totalCount}
+        currentPage={page}
+        totalPages={totalPages}
+        firstShown={totalCount === 0 ? 0 : offset + 1}
+        lastShown={offset + jobs.length}
+        searchTerm={search}
+        hrefForPage={(p) => buildHref({ page: p > 1 ? String(p) : undefined })}
+      />
     </AdminShell>
   );
 }
 
-function FilterPill({
-  label,
-  href,
-  active,
-}: {
-  label: string;
-  href: string;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-        active
-          ? "bg-brand-600 text-white"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
-
-function Pagination({
+/**
+ * Footer de la tabla: contador a la izquierda, paginacion a la derecha.
+ * Siempre visible (incluso con 1 sola pagina). Si totalPages > 1, agrega
+ * los controles de navegacion.
+ */
+function TableFooter({
+  totalCount,
   currentPage,
   totalPages,
-  totalCount,
   firstShown,
   lastShown,
+  searchTerm,
   hrefForPage,
 }: {
+  totalCount: number;
   currentPage: number;
   totalPages: number;
-  totalCount: number;
   firstShown: number;
   lastShown: number;
+  searchTerm: string;
   hrefForPage: (p: number) => string;
 }) {
   const pageNumbers = computeVisiblePages(currentPage, totalPages);
 
+  let leftText: string;
+  if (totalCount === 0) {
+    leftText = searchTerm
+      ? `Sin resultados para "${searchTerm}".`
+      : "Sin servicios registrados.";
+  } else {
+    const noun = totalCount === 1 ? "servicio" : "servicios";
+    const filtered = searchTerm ? ` para "${searchTerm}"` : "";
+    leftText =
+      totalPages > 1
+        ? `${firstShown}–${lastShown} de ${totalCount} ${noun}${filtered} · Página ${currentPage} de ${totalPages}`
+        : `${totalCount} ${noun}${filtered} · Página 1 de 1`;
+  }
+
   return (
     <nav
-      aria-label="Paginación"
-      className="mt-4 flex flex-wrap items-center justify-between gap-3"
+      aria-label="Pie de tabla"
+      className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400"
     >
-      <span className="text-xs text-slate-500 dark:text-slate-400">
-        Mostrando{" "}
-        <strong className="text-slate-700 dark:text-slate-200">
-          {firstShown}–{lastShown}
-        </strong>{" "}
-        de{" "}
-        <strong className="text-slate-700 dark:text-slate-200">{totalCount}</strong>
-      </span>
+      <span>{leftText}</span>
 
-      <div className="flex flex-wrap items-center gap-1">
-        <PageLink
-          href={hrefForPage(Math.max(1, currentPage - 1))}
-          disabled={currentPage === 1}
-          aria-label="Página anterior"
-        >
-          ‹
-        </PageLink>
+      {totalPages > 1 ? (
+        <div className="flex flex-wrap items-center gap-1">
+          <PageLink
+            href={hrefForPage(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            aria-label="Página anterior"
+          >
+            ‹
+          </PageLink>
 
-        {pageNumbers.map((n, i) =>
-          n === "ellipsis" ? (
-            <span
-              key={`e${i}`}
-              className="px-2 text-xs text-slate-400"
-              aria-hidden
-            >
-              …
-            </span>
-          ) : (
-            <PageLink
-              key={n}
-              href={hrefForPage(n)}
-              active={n === currentPage}
-            >
-              {n}
-            </PageLink>
-          ),
-        )}
+          {pageNumbers.map((n, i) =>
+            n === "ellipsis" ? (
+              <span
+                key={`e${i}`}
+                className="px-2 text-xs text-slate-400"
+                aria-hidden
+              >
+                …
+              </span>
+            ) : (
+              <PageLink
+                key={n}
+                href={hrefForPage(n)}
+                active={n === currentPage}
+              >
+                {n}
+              </PageLink>
+            ),
+          )}
 
-        <PageLink
-          href={hrefForPage(Math.min(totalPages, currentPage + 1))}
-          disabled={currentPage === totalPages}
-          aria-label="Página siguiente"
-        >
-          ›
-        </PageLink>
-      </div>
+          <PageLink
+            href={hrefForPage(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            aria-label="Página siguiente"
+          >
+            ›
+          </PageLink>
+        </div>
+      ) : null}
     </nav>
   );
 }
