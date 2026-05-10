@@ -35,11 +35,9 @@ export function RequestFeedbackButton({
   }, [state, router]);
 
   if (hasOpenRequest) {
-    return (
-      <span className="text-xs text-slate-500 dark:text-slate-400">
-        Solicitud abierta
-      </span>
-    );
+    // El estado "En curso" se muestra en la columna "Feedback" de la tabla;
+    // aqui en Acciones no renderizamos boton para evitar disparar duplicados.
+    return null;
   }
 
   return (

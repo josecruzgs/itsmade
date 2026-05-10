@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+/** Trata strings vacios ("") como ausentes — comun cuando dotenv carga `KEY=`. */
+const optionalString = (schema = z.string().min(1)) =>
+  z.preprocess((v) => (v === "" ? undefined : v), schema.optional());
+
+const optionalUrl = () =>
+  z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional());
+
 const serverSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
@@ -16,12 +23,12 @@ const serverSchema = z.object({
   EVOLUTION_API_KEY: z.string().min(1),
   EVOLUTION_INSTANCE_NAME: z.string().min(1).default("itsmade"),
   // Token por-instancia que Evolution v2 envia firmando los webhooks.
-  EVOLUTION_INSTANCE_TOKEN: z.string().min(1).optional(),
-  EVOLUTION_WEBHOOK_GLOBAL_URL: z.string().url().optional(),
+  EVOLUTION_INSTANCE_TOKEN: optionalString(),
+  EVOLUTION_WEBHOOK_GLOBAL_URL: optionalUrl(),
 
   // Bearer secret que Vercel Cron envia en Authorization. Si no se setea,
   // el endpoint cron acepta llamadas sin auth (util en dev local).
-  CRON_SECRET: z.string().min(1).optional(),
+  CRON_SECRET: optionalString(),
 
   // Cron auto-cierre: conversaciones inactivas mas de N horas pasan a 'closed'.
   CONVERSATION_AUTO_CLOSE_HOURS: z.coerce.number().int().positive().default(72),

@@ -120,6 +120,7 @@ export interface CustomerRow {
   whatsapp_phone: string;
   name: string | null;
   email: string | null;
+  company_name: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -134,6 +135,8 @@ export interface ServiceJobRow {
   completed_at: string | null;
   status: ServiceJobStatus;
   notes: string | null;
+  address: string | null;
+  cost_mxn: number | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }

@@ -1,46 +1,54 @@
 import Link from "next/link";
 import { AdminShell } from "@/components/AdminShell";
-import { RequestFeedbackButton } from "@/components/RequestFeedbackButton";
+import {
+  ServicesPanel,
+  type ServiceJobJoined,
+  type ServicesQueryParams,
+} from "@/components/ServicesPanel";
 import { supabaseServer } from "@/lib/supabase/server";
 import type {
   BranchRow,
-  CustomerRow,
+  ServiceCategoryRow,
   ServiceJobStatus,
   ServiceRow,
 } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
-interface ServiceJobRowJoined {
-  id: string;
-  scheduled_at: string | null;
-  completed_at: string | null;
-  status: ServiceJobStatus;
-  notes: string | null;
-  created_at: string;
-  customer: Pick<CustomerRow, "id" | "name" | "whatsapp_phone"> | null;
-  branch: Pick<BranchRow, "id" | "name" | "city"> | null;
-  service: Pick<ServiceRow, "id" | "name" | "code"> | null;
-  feedback_requests: Array<{ id: string; status: string }>;
-}
-
-const statusBadge: Record<ServiceJobStatus, string> = {
-  scheduled: "badge-neutral",
-  in_progress: "badge-warning",
-  completed: "badge-success",
-  cancelled: "badge-neutral",
-};
+const PAGE_SIZE = 20;
 
 const STATUS_LABEL: Record<ServiceJobStatus, string> = {
-  scheduled: "Agendado",
-  in_progress: "En curso",
-  completed: "Completado",
+  scheduled: "Pendiente",
+  in_progress: "En proceso",
+  completed: "Realizado",
   cancelled: "Cancelado",
 };
+
+type SortKey =
+  | "created"
+  | "customer"
+  | "service"
+  | "branch"
+  | "cost"
+  | "status";
+type SortDir = "asc" | "desc";
+
+const VALID_SORTS: SortKey[] = [
+  "created",
+  "customer",
+  "service",
+  "branch",
+  "cost",
+  "status",
+];
 
 interface SearchParams {
   status?: string;
   branch?: string;
+  page?: string;
+  q?: string;
+  sort?: string;
+  dir?: string;
 }
 
 export default async function ServicesPage({
@@ -49,46 +57,232 @@ export default async function ServicesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const search = (sp.q ?? "").trim();
+  const sort: SortKey = VALID_SORTS.includes(sp.sort as SortKey)
+    ? (sp.sort as SortKey)
+    : "created";
+  const dir: SortDir = sp.dir === "asc" ? "asc" : "desc";
+
   const sb = supabaseServer();
 
-  const [branchesRes, jobsRes] = await Promise.all([
-    sb.from("branches").select("id, name, city").eq("active", true).order("city"),
+  // -------------------------------------------------------------------------
+  // Si hay search, primero resolvemos IDs candidatos en customers / branches
+  // / services en paralelo y construimos un OR filter sobre service_jobs.
+  // -------------------------------------------------------------------------
+  let searchOrFilter: string | null = null;
+  if (search) {
+    const escaped = search.replace(/[%_]/g, (m) => `\\${m}`);
+    const pattern = `%${escaped}%`;
+
+    const [custRes, brRes, svcRes] = await Promise.all([
+      sb
+        .from("customers")
+        .select("id")
+        .or(
+          [
+            `name.ilike.${pattern}`,
+            `company_name.ilike.${pattern}`,
+            `whatsapp_phone.ilike.${pattern}`,
+            `email.ilike.${pattern}`,
+          ].join(","),
+        ),
+      sb
+        .from("branches")
+        .select("id")
+        .or([`name.ilike.${pattern}`, `city.ilike.${pattern}`].join(",")),
+      sb
+        .from("services")
+        .select("id")
+        .or([`name.ilike.${pattern}`, `code.ilike.${pattern}`].join(",")),
+    ]);
+
+    const customerIds = (custRes.data ?? []).map((r) => r.id);
+    const branchIds = (brRes.data ?? []).map((r) => r.id);
+    const serviceIds = (svcRes.data ?? []).map((r) => r.id);
+
+    const orParts: string[] = [];
+    if (customerIds.length > 0) {
+      orParts.push(`customer_id.in.(${customerIds.join(",")})`);
+    }
+    if (branchIds.length > 0) {
+      orParts.push(`branch_id.in.(${branchIds.join(",")})`);
+    }
+    if (serviceIds.length > 0) {
+      orParts.push(`service_id.in.(${serviceIds.join(",")})`);
+    }
+
+    // Si nada matcheo, forzamos un filtro que devuelve 0 filas.
+    searchOrFilter =
+      orParts.length > 0
+        ? orParts.join(",")
+        : `id.eq.00000000-0000-0000-0000-000000000000`;
+  }
+
+  const [branchesRes, categoriesRes, servicesRes, jobsRes] = await Promise.all([
+    sb.from("branches").select("*").order("city"),
+    sb.from("service_categories").select("*").order("slug"),
+    sb.from("services").select("*").order("code"),
     (() => {
       let q = sb
         .from("service_jobs")
         .select(
           `
-          id, scheduled_at, completed_at, status, notes, created_at,
-          customer:customers!service_jobs_customer_id_fkey(id, name, whatsapp_phone),
+          id, scheduled_at, completed_at, status, notes, address, cost_mxn, created_at,
+          customer:customers!service_jobs_customer_id_fkey(id, name, company_name, whatsapp_phone, email),
           branch:branches!service_jobs_branch_id_fkey(id, name, city),
-          service:services!service_jobs_service_id_fkey(id, name, code),
+          service:services!service_jobs_service_id_fkey(id, name, code, category_id),
           feedback_requests(id, status)
         `,
-        )
-        .order("created_at", { ascending: false })
-        .limit(100);
+          { count: "exact" },
+        );
+
+      // Filtros antes que sort/range.
       if (sp.status && sp.status !== "all") {
         q = q.eq("status", sp.status as ServiceJobStatus);
       }
       if (sp.branch && sp.branch !== "all") {
         q = q.eq("branch_id", sp.branch);
       }
-      return q;
+      if (searchOrFilter) {
+        q = q.or(searchOrFilter);
+      }
+
+      // Sort segun el SortKey (joined columns usan referencedTable).
+      const ascending = dir === "asc";
+      switch (sort) {
+        case "customer":
+          q = q.order("name", { referencedTable: "customer", ascending });
+          break;
+        case "service":
+          q = q.order("code", { referencedTable: "service", ascending });
+          break;
+        case "branch":
+          q = q.order("city", { referencedTable: "branch", ascending });
+          break;
+        case "cost":
+          q = q.order("cost_mxn", { ascending, nullsFirst: false });
+          break;
+        case "status":
+          q = q.order("status", { ascending });
+          break;
+        case "created":
+        default:
+          q = q.order("created_at", { ascending });
+          break;
+      }
+      // Tiebreaker estable.
+      q = q.order("id", { ascending: true });
+
+      return q.range(offset, offset + PAGE_SIZE - 1);
     })(),
   ]);
 
-  const branches = (branchesRes.data ?? []) as Array<Pick<BranchRow, "id" | "name" | "city">>;
-  const jobs = (jobsRes.data ?? []) as unknown as ServiceJobRowJoined[];
+  const branches = (branchesRes.data ?? []) as BranchRow[];
+  const categories = (categoriesRes.data ?? []) as ServiceCategoryRow[];
+  const services = (servicesRes.data ?? []) as ServiceRow[];
+  const jobs = (jobsRes.data ?? []) as unknown as ServiceJobJoined[];
+  const totalCount = jobsRes.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const branchesActiveForFilter = branches.filter((b) => b.active);
+
+  const currentParams: ServicesQueryParams = {
+    q: search,
+    status: sp.status ?? "",
+    branch: sp.branch ?? "",
+    sort,
+    dir,
+  };
+
+  function buildHref(overrides: Partial<SearchParams>): string {
+    const params = new URLSearchParams();
+    const merged: SearchParams = { ...sp, ...overrides };
+    if (merged.q) params.set("q", merged.q);
+    if (merged.status && merged.status !== "all") {
+      params.set("status", merged.status);
+    }
+    if (merged.branch && merged.branch !== "all") {
+      params.set("branch", merged.branch);
+    }
+    if (merged.sort && merged.sort !== "created") params.set("sort", merged.sort);
+    if (merged.dir && merged.dir !== "desc") params.set("dir", merged.dir);
+    if (merged.page && merged.page !== "1") params.set("page", merged.page);
+    const qs = params.toString();
+    return qs ? `/services?${qs}` : "/services";
+  }
+
+  // Cambiar filtro = resetear page.
+  function filterHref(overrides: Partial<SearchParams>): string {
+    return buildHref({ ...overrides, page: undefined });
+  }
+
+  const description =
+    totalCount === 0 && !search
+      ? 'Aún no hay órdenes registradas. Crea la primera con "Nuevo servicio".'
+      : `${totalCount} ${totalCount === 1 ? "orden" : "órdenes"}${search ? ` para "${search}"` : ""} · página ${page} de ${totalPages}.`;
 
   return (
-    <AdminShell
-      title="Servicios"
-      description={`${jobs.length} órdenes de servicio recientes.`}
-    >
+    <AdminShell title="Servicios" description={description}>
+      {/* Search bar */}
+      <form
+        action="/services"
+        method="get"
+        className="card mb-3 flex flex-wrap items-center gap-2 p-3"
+      >
+        {sp.status && sp.status !== "all" ? (
+          <input type="hidden" name="status" value={sp.status} />
+        ) : null}
+        {sp.branch && sp.branch !== "all" ? (
+          <input type="hidden" name="branch" value={sp.branch} />
+        ) : null}
+        {sp.sort && sp.sort !== "created" ? (
+          <input type="hidden" name="sort" value={sp.sort} />
+        ) : null}
+        {sp.dir && sp.dir !== "desc" ? (
+          <input type="hidden" name="dir" value={sp.dir} />
+        ) : null}
+
+        <div className="relative flex-1">
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="search"
+            name="q"
+            defaultValue={search}
+            placeholder="Buscar cliente, empresa, WhatsApp, sucursal o servicio…"
+            className="field pl-9"
+          />
+        </div>
+
+        <button type="submit" className="btn-primary text-sm">
+          Buscar
+        </button>
+        {search ? (
+          <Link href={filterHref({ q: "" })} className="btn-ghost text-sm">
+            Limpiar
+          </Link>
+        ) : null}
+      </form>
+
+      {/* Filter pills */}
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
         <FilterPill
           label="Todos"
-          href="/services"
+          href={filterHref({ status: "all" })}
           active={!sp.status || sp.status === "all"}
         />
         {(["scheduled", "in_progress", "completed", "cancelled"] as ServiceJobStatus[]).map(
@@ -96,7 +290,7 @@ export default async function ServicesPage({
             <FilterPill
               key={s}
               label={STATUS_LABEL[s]}
-              href={`/services?status=${s}${sp.branch ? `&branch=${sp.branch}` : ""}`}
+              href={filterHref({ status: s })}
               active={sp.status === s}
             />
           ),
@@ -104,17 +298,14 @@ export default async function ServicesPage({
         <span className="ml-2 text-sm text-slate-400">|</span>
         <FilterPill
           label="Todas las sucursales"
-          href={`/services${sp.status ? `?status=${sp.status}` : ""}`}
+          href={filterHref({ branch: "all" })}
           active={!sp.branch || sp.branch === "all"}
         />
-        {branches.map((b) => (
+        {branchesActiveForFilter.map((b) => (
           <FilterPill
             key={b.id}
             label={b.city}
-            href={`/services?${new URLSearchParams({
-              ...(sp.status ? { status: sp.status } : {}),
-              branch: b.id,
-            }).toString()}`}
+            href={filterHref({ branch: b.id })}
             active={sp.branch === b.id}
           />
         ))}
@@ -126,89 +317,24 @@ export default async function ServicesPage({
         </div>
       ) : null}
 
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3 font-medium">Cliente</th>
-                <th className="px-4 py-3 font-medium">Servicio</th>
-                <th className="px-4 py-3 font-medium">Sucursal</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">Completado</th>
-                <th className="px-4 py-3 text-right font-medium">Feedback</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {jobs.map((j) => {
-                const openReq = j.feedback_requests?.find((r) =>
-                  ["pending", "in_progress"].includes(r.status),
-                );
-                const completedReq = j.feedback_requests?.find(
-                  (r) => r.status === "completed",
-                );
-                return (
-                  <tr
-                    key={j.id}
-                    className="transition hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">
-                        {j.customer?.name ?? "—"}
-                      </div>
-                      <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {j.customer?.whatsapp_phone ?? ""}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-slate-900 dark:text-slate-100">
-                        {j.service?.name ?? "—"}
-                      </div>
-                      <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {j.service?.code ?? ""}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
-                      {j.branch?.city ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={statusBadge[j.status]}>
-                        {STATUS_LABEL[j.status]}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                      {j.completed_at
-                        ? new Date(j.completed_at).toLocaleString("es-MX")
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {j.status === "completed" ? (
-                        <RequestFeedbackButton
-                          serviceJobId={j.id}
-                          hasOpenRequest={Boolean(openReq)}
-                          hasCompletedRequest={Boolean(completedReq) && !openReq}
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {jobs.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center text-slate-500 dark:text-slate-400"
-                  >
-                    No hay servicios con esos filtros.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ServicesPanel
+        jobs={jobs}
+        branches={branches}
+        categories={categories}
+        services={services}
+        currentParams={currentParams}
+      />
+
+      {totalCount > PAGE_SIZE ? (
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          firstShown={offset + 1}
+          lastShown={offset + jobs.length}
+          hrefForPage={(p) => buildHref({ page: p > 1 ? String(p) : undefined })}
+        />
+      ) : null}
     </AdminShell>
   );
 }
@@ -234,4 +360,129 @@ function FilterPill({
       {label}
     </Link>
   );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalCount,
+  firstShown,
+  lastShown,
+  hrefForPage,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  firstShown: number;
+  lastShown: number;
+  hrefForPage: (p: number) => string;
+}) {
+  const pageNumbers = computeVisiblePages(currentPage, totalPages);
+
+  return (
+    <nav
+      aria-label="Paginación"
+      className="mt-4 flex flex-wrap items-center justify-between gap-3"
+    >
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        Mostrando{" "}
+        <strong className="text-slate-700 dark:text-slate-200">
+          {firstShown}–{lastShown}
+        </strong>{" "}
+        de{" "}
+        <strong className="text-slate-700 dark:text-slate-200">{totalCount}</strong>
+      </span>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <PageLink
+          href={hrefForPage(Math.max(1, currentPage - 1))}
+          disabled={currentPage === 1}
+          aria-label="Página anterior"
+        >
+          ‹
+        </PageLink>
+
+        {pageNumbers.map((n, i) =>
+          n === "ellipsis" ? (
+            <span
+              key={`e${i}`}
+              className="px-2 text-xs text-slate-400"
+              aria-hidden
+            >
+              …
+            </span>
+          ) : (
+            <PageLink
+              key={n}
+              href={hrefForPage(n)}
+              active={n === currentPage}
+            >
+              {n}
+            </PageLink>
+          ),
+        )}
+
+        <PageLink
+          href={hrefForPage(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage === totalPages}
+          aria-label="Página siguiente"
+        >
+          ›
+        </PageLink>
+      </div>
+    </nav>
+  );
+}
+
+function PageLink({
+  href,
+  active,
+  disabled,
+  children,
+  ...rest
+}: {
+  href: string;
+  active?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+  "aria-label"?: string;
+}) {
+  const className = `inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs font-medium transition ${
+    active
+      ? "bg-brand-600 text-white"
+      : disabled
+        ? "cursor-not-allowed text-slate-300 dark:text-slate-600"
+        : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+  }`;
+
+  if (disabled) {
+    return (
+      <span className={className} aria-disabled {...rest}>
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <Link href={href} className={className} {...rest}>
+      {children}
+    </Link>
+  );
+}
+
+function computeVisiblePages(
+  current: number,
+  total: number,
+): Array<number | "ellipsis"> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const result: Array<number | "ellipsis"> = [1];
+  if (current > 3) result.push("ellipsis");
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) result.push(i);
+  if (current < total - 2) result.push("ellipsis");
+  result.push(total);
+  return result;
 }

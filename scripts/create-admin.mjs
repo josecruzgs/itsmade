@@ -12,6 +12,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 function loadEnvFile(path) {
   if (!existsSync(path)) throw new Error(`No existe: ${path}`);
@@ -33,7 +34,10 @@ function loadEnvFile(path) {
   }
 }
 
-loadEnvFile(resolve(".env.local"));
+// Lee .env primero (estandar de docker compose y dev compartido); cae a .env.local
+// si existe (compatibilidad con la convencion clasica de Next.js).
+const envPath = existsSync(resolve(".env")) ? resolve(".env") : resolve(".env.local");
+loadEnvFile(envPath);
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -54,6 +58,9 @@ if (!email || !password) {
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
+  // Node < 22 no tiene WebSocket nativo; supabase-js inicializa Realtime aunque
+  // no lo usemos. Le pasamos el transport explicito.
+  realtime: { transport: ws },
 });
 
 async function findAuthUserByEmail(emailToFind) {
