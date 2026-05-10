@@ -8,6 +8,7 @@ import {
 import { supabaseServer } from "@/lib/supabase/server";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceJobStatus,
   ServiceRow,
@@ -121,19 +122,26 @@ export default async function ServicesPage({
         : `id.eq.00000000-0000-0000-0000-000000000000`;
   }
 
-  const [branchesRes, categoriesRes, servicesRes, jobsRes] = await Promise.all([
+  const [branchesRes, categoriesRes, servicesRes, employeesRes, jobsRes] = await Promise.all([
     sb.from("branches").select("*").order("city"),
     sb.from("service_categories").select("*").order("slug"),
     sb.from("services").select("*").order("code"),
+    sb
+      .from("employees")
+      .select("*")
+      .eq("active", true)
+      .order("full_name"),
     (() => {
       let q = sb
         .from("service_jobs")
         .select(
           `
           id, scheduled_at, completed_at, status, notes, address, cost_mxn, created_at,
+          assigned_employee_id, pdf_sent_at,
           customer:customers!service_jobs_customer_id_fkey(id, name, company_name, whatsapp_phone, email),
           branch:branches!service_jobs_branch_id_fkey(id, name, city),
           service:services!service_jobs_service_id_fkey(id, name, code, category_id),
+          assigned_employee:employees!service_jobs_assigned_employee_id_fkey(id, full_name, position),
           feedback_requests(id, status)
         `,
           { count: "exact" },
@@ -183,6 +191,7 @@ export default async function ServicesPage({
   const branches = (branchesRes.data ?? []) as BranchRow[];
   const categories = (categoriesRes.data ?? []) as ServiceCategoryRow[];
   const services = (servicesRes.data ?? []) as ServiceRow[];
+  const employees = (employeesRes.data ?? []) as EmployeeRow[];
   const jobs = (jobsRes.data ?? []) as unknown as ServiceJobJoined[];
   const totalCount = jobsRes.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -322,6 +331,7 @@ export default async function ServicesPage({
         branches={branches}
         categories={categories}
         services={services}
+        employees={employees}
         currentParams={currentParams}
       />
 

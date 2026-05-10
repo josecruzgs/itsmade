@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { RequestFeedbackButton } from "@/components/RequestFeedbackButton";
+import { SendPdfButton } from "@/components/SendPdfButton";
 import {
   createServiceJob,
   updateServiceJob,
@@ -24,6 +25,7 @@ import {
 import type { ActionResult } from "@/lib/auth/actions";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceJobStatus,
   ServiceRow,
@@ -46,6 +48,8 @@ export interface ServiceJobJoined {
   address: string | null;
   cost_mxn: number | null;
   created_at: string;
+  assigned_employee_id: string | null;
+  pdf_sent_at: string | null;
   customer: {
     id: string;
     name: string | null;
@@ -55,6 +59,7 @@ export interface ServiceJobJoined {
   } | null;
   branch: { id: string; name: string; city: string } | null;
   service: { id: string; name: string; code: string; category_id: string } | null;
+  assigned_employee: { id: string; full_name: string; position: string | null } | null;
   feedback_requests: Array<{ id: string; status: string }>;
 }
 
@@ -77,12 +82,14 @@ export function ServicesPanel({
   branches,
   categories,
   services,
+  employees,
   currentParams,
 }: {
   jobs: ServiceJobJoined[];
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
+  employees: EmployeeRow[];
   currentParams: ServicesQueryParams;
 }) {
   const router = useRouter();
@@ -143,17 +150,23 @@ export function ServicesPanel({
                   current={currentParams}
                 />
                 <th className="px-4 py-3 font-medium">Feedback</th>
+                <th className="px-4 py-3 font-medium">Asignado a</th>
                 <th className="px-4 py-3 text-right font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {jobs.map((j) => (
-                <ServiceRowItem key={j.id} job={j} onEdit={() => setEditing(j)} />
+                <ServiceRowItem
+                  key={j.id}
+                  job={j}
+                  employees={employees}
+                  onEdit={() => setEditing(j)}
+                />
               ))}
               {jobs.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-slate-500 dark:text-slate-400"
                   >
                     Sin servicios registrados todavía. Presiona &quot;Nuevo servicio&quot; para empezar.
@@ -183,9 +196,11 @@ export function ServicesPanel({
 
 function ServiceRowItem({
   job,
+  employees,
   onEdit,
 }: {
   job: ServiceJobJoined;
+  employees: EmployeeRow[];
   onEdit: () => void;
 }) {
   const openReq = job.feedback_requests?.find((r) =>
@@ -239,6 +254,28 @@ function ServiceRowItem({
       <td className="px-4 py-3">
         <FeedbackStatusCell requests={job.feedback_requests ?? []} />
       </td>
+      <td className="px-4 py-3">
+        {job.assigned_employee ? (
+          <div>
+            <div className="font-medium text-slate-900 dark:text-slate-100">
+              {job.assigned_employee.full_name}
+            </div>
+            {job.assigned_employee.position ? (
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {job.assigned_employee.position}
+              </div>
+            ) : null}
+            {job.pdf_sent_at ? (
+              <div className="text-xs text-slate-400">
+                PDF enviado{" "}
+                {new Date(job.pdf_sent_at).toLocaleDateString("es-MX")}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <span className="text-xs italic text-slate-400">Sin asignar</span>
+        )}
+      </td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">
           {job.status === "completed" ? (
@@ -248,6 +285,12 @@ function ServiceRowItem({
               hasCompletedRequest={Boolean(completedReq) && !openReq}
             />
           ) : null}
+
+          <SendPdfButton
+            serviceJobId={job.id}
+            employees={employees}
+            currentlyAssignedId={job.assigned_employee_id}
+          />
 
           <button
             type="button"
@@ -273,14 +316,21 @@ export interface ServiceJobModalInitialCustomer {
 export function ServiceJobModal({
   job,
   initialCustomer,
+  initialNotes,
+  intakeId,
   branches,
   categories,
   services,
   onClose,
 }: {
   job: ServiceJobJoined | null;
-  /** Prellena datos de cliente al crear nuevo servicio (ej: desde /clients). */
+  /** Prellena datos de cliente al crear nuevo servicio (ej: desde /clients o /intake). */
   initialCustomer?: ServiceJobModalInitialCustomer | null;
+  /** Prellena notas (ej: descripcion del intake al convertir a servicio). */
+  initialNotes?: string | null;
+  /** Si esta presente, el form lo manda como hidden field para que createServiceJob
+   *  marque ese intake como 'converted' y enlace el service_job creado. */
+  intakeId?: string | null;
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
@@ -419,6 +469,9 @@ export function ServiceJobModal({
 
         <form key={formKey} action={action} className="px-6 py-5">
           {!isNew ? <input type="hidden" name="id" value={job.id} /> : null}
+          {isNew && intakeId ? (
+            <input type="hidden" name="intake_id" value={intakeId} />
+          ) : null}
 
           {/* === CLIENTE === */}
           <Section
@@ -588,7 +641,7 @@ export function ServiceJobModal({
             <label className="block">
               <textarea
                 name="notes"
-                defaultValue={job?.notes ?? ""}
+                defaultValue={job?.notes ?? initialNotes ?? ""}
                 rows={3}
                 className="field resize-y"
                 maxLength={500}

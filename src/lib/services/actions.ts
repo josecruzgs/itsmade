@@ -127,20 +127,35 @@ export async function createServiceJob(
   const completed_at =
     data.status === "completed" ? new Date().toISOString() : null;
 
-  const { error: jobErr } = await sb.from("service_jobs").insert({
-    customer_id: customer.id,
-    branch_id: data.branch_id,
-    service_id: data.service_id,
-    address: data.address,
-    cost_mxn: data.cost_mxn,
-    notes: data.notes,
-    scheduled_at: data.scheduled_at,
-    status: data.status,
-    completed_at,
-  });
+  const { data: created, error: jobErr } = await sb
+    .from("service_jobs")
+    .insert({
+      customer_id: customer.id,
+      branch_id: data.branch_id,
+      service_id: data.service_id,
+      address: data.address,
+      cost_mxn: data.cost_mxn,
+      notes: data.notes,
+      scheduled_at: data.scheduled_at,
+      status: data.status,
+      completed_at,
+    })
+    .select("id")
+    .single();
 
-  if (jobErr) {
-    return { ok: false, error: jobErr.message };
+  if (jobErr || !created) {
+    return { ok: false, error: jobErr?.message ?? "No se pudo crear el servicio" };
+  }
+
+  // Si el form viene desde el flujo de /intake (boton "Convertir a servicio"),
+  // marca el intake como 'converted' y enlazalo al service_job recien creado.
+  const intakeId = String(formData.get("intake_id") ?? "").trim();
+  if (intakeId) {
+    await sb
+      .from("service_intake_requests")
+      .update({ status: "converted", service_job_id: created.id })
+      .eq("id", intakeId);
+    revalidatePath("/intake");
   }
 
   revalidatePath("/services");

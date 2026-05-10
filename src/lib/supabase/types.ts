@@ -181,7 +181,21 @@ export interface ServiceJobRow {
   address: string | null;
   cost_mxn: number | null;
   metadata: Record<string, unknown>;
+  assigned_employee_id: string | null;
+  pdf_sent_at: string | null;
   created_at: string;
+}
+
+export interface EmployeeRow {
+  id: string;
+  full_name: string;
+  position: string | null;
+  area: string | null;
+  whatsapp_phone: string;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ConversationRow {

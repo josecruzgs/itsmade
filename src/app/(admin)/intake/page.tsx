@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AdminShell } from "@/components/AdminShell";
+import { IntakeConvertButton } from "@/components/IntakeConvertButton";
 import { supabaseServer } from "@/lib/supabase/server";
 import {
   assignIntakeToMe,
@@ -7,9 +8,12 @@ import {
   updateIntakeStatus,
 } from "@/lib/intake/actions";
 import type {
+  BranchRow,
   CustomerRow,
   IntakeRequestStatus,
   ProfileRow,
+  ServiceCategoryRow,
+  ServiceRow,
 } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -44,30 +48,41 @@ const statusLabel: Record<IntakeRequestStatus, string> = {
 
 export default async function IntakePage() {
   const sb = supabaseServer();
-  const { data, error } = await sb
-    .from("service_intake_requests")
-    .select(
-      `
+
+  // Cargamos en paralelo: intakes + catalogos para que el modal de conversion
+  // (que reusa ServiceJobModal) tenga branches/categories/services.
+  const [intakesRes, branchesRes, categoriesRes, servicesRes] = await Promise.all([
+    sb
+      .from("service_intake_requests")
+      .select(
+        `
       id, status, requested_name, requested_phone, raw_request_description,
       notes, created_at, conversation_id, service_job_id,
       customer:customers!service_intake_requests_customer_id_fkey(id, name, whatsapp_phone),
       assigned_to:profiles!service_intake_requests_assigned_to_profile_id_fkey(id, full_name, email)
     `,
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
+      )
+      .order("created_at", { ascending: false })
+      .limit(200),
+    sb.from("branches").select("*").order("city"),
+    sb.from("service_categories").select("*").order("name"),
+    sb.from("services").select("*").order("name"),
+  ]);
 
-  if (error) {
+  if (intakesRes.error) {
     return (
       <AdminShell title="Solicitudes de servicio">
         <div className="card p-4 text-sm text-red-600 dark:text-red-400">
-          Error: {error.message}
+          Error: {intakesRes.error.message}
         </div>
       </AdminShell>
     );
   }
 
-  const rows = (data ?? []) as unknown as IntakeRowJoined[];
+  const rows = (intakesRes.data ?? []) as unknown as IntakeRowJoined[];
+  const branches = (branchesRes.data ?? []) as BranchRow[];
+  const categories = (categoriesRes.data ?? []) as ServiceCategoryRow[];
+  const services = (servicesRes.data ?? []) as ServiceRow[];
 
   const summary = {
     total: rows.length,
@@ -104,7 +119,13 @@ export default async function IntakePage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.map((r) => (
-                <IntakeRow key={r.id} row={r} />
+                <IntakeRow
+                  key={r.id}
+                  row={r}
+                  branches={branches}
+                  categories={categories}
+                  services={services}
+                />
               ))}
               {rows.length === 0 ? (
                 <tr>
@@ -125,7 +146,17 @@ export default async function IntakePage() {
   );
 }
 
-function IntakeRow({ row }: { row: IntakeRowJoined }) {
+function IntakeRow({
+  row,
+  branches,
+  categories,
+  services,
+}: {
+  row: IntakeRowJoined;
+  branches: BranchRow[];
+  categories: ServiceCategoryRow[];
+  services: ServiceRow[];
+}) {
   const customerHasNameMismatch =
     row.customer?.name && row.customer.name.trim() !== row.requested_name.trim();
 
@@ -208,13 +239,23 @@ function IntakeRow({ row }: { row: IntakeRowJoined }) {
 
           {row.status === "pending_review" || row.status === "in_review" ? (
             <>
-              <form action={updateIntakeStatus}>
-                <input type="hidden" name="id" value={row.id} />
-                <input type="hidden" name="status" value="converted" />
-                <button type="submit" className="btn-primary w-full text-xs">
-                  Marcar convertido
-                </button>
-              </form>
+              <IntakeConvertButton
+                seed={{
+                  intakeId: row.id,
+                  customer: {
+                    id: row.customer?.id,
+                    name: row.requested_name,
+                    company_name: null,
+                    whatsapp_phone:
+                      row.customer?.whatsapp_phone ?? row.requested_phone,
+                    email: null,
+                  },
+                  description: row.raw_request_description,
+                }}
+                branches={branches}
+                categories={categories}
+                services={services}
+              />
               <form action={updateIntakeStatus}>
                 <input type="hidden" name="id" value={row.id} />
                 <input type="hidden" name="status" value="dismissed" />

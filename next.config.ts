@@ -4,7 +4,6 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
-  serverExternalPackages: ["@react-pdf/renderer"],
   // Forzar el root al directorio del proyecto. Sin esto Next.js detecta el
   // lockfile global de %USERPROFILE% y resuelve los paths de tracing desde ahi.
   outputFileTracingRoot: path.join(__dirname),

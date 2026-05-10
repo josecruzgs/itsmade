@@ -10,6 +10,7 @@ const links = [
   { href: "/services", label: "Servicios" },
   { href: "/intake", label: "Solicitudes" },
   { href: "/clients", label: "Clientes" },
+  { href: "/employees", label: "Empleados" },
   { href: "/feedback", label: "Feedback" },
   { href: "/conversations", label: "Conversaciones" },
   { href: "/branches", label: "Sucursales" },
