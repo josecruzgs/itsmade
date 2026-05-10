@@ -24,7 +24,7 @@ export type MessageRole = "user" | "assistant" | "system" | "tool";
 /** Discriminator del agente que opera la conversación.
  *  Ampliable: agregar el nuevo nombre aquí + en el CHECK constraint
  *  de `conversations.agent_type` con una migración nueva. */
-export type AgentType = "feedback";
+export type AgentType = "feedback" | "info" | "intake";
 
 export type FeedbackRequestStatus =
   | "pending"
@@ -33,6 +33,12 @@ export type FeedbackRequestStatus =
   | "expired"
   | "escalated"
   | "cancelled";
+
+export type IntakeRequestStatus =
+  | "pending_review"
+  | "in_review"
+  | "converted"
+  | "dismissed";
 
 export type NpsBucket = "promoter" | "passive" | "detractor";
 
@@ -73,6 +79,41 @@ export interface FeedbackConversationState {
   turns: ConversationTurn[]; // últimas 30 en DB; modelo recibe últimas 10
 }
 
+/** Estado del agente `info` — concierge para preguntas generales.
+ *  No tiene flujo estructurado; solo arrastra historial y handoff opcional. */
+export interface InfoConversationState {
+  kind: "info"; // discriminador
+  handoff: { reason: string; at: string } | null;
+  turns: ConversationTurn[];
+}
+
+/** Estado del agente `intake` — registra la solicitud de servicio.
+ *  Captura paso a paso: nombre → celular → descripción breve → finaliza. */
+export type IntakeStep =
+  | "ask_name"
+  | "ask_phone"
+  | "ask_description"
+  | "confirm"
+  | "done";
+
+export interface IntakeCollected {
+  name: string | null;
+  phone: string | null;
+  description: string | null;
+}
+
+export interface IntakeConversationState {
+  kind: "intake"; // discriminador
+  current_step: IntakeStep;
+  collected: IntakeCollected;
+  /** Si el celular capturado matchea un customer existente, su id. */
+  matched_customer_id: string | null;
+  /** id del registro en service_intake_requests creado al finalizar. */
+  intake_request_id: string | null;
+  handoff: { reason: string; at: string } | null;
+  turns: ConversationTurn[];
+}
+
 /** Estado vacío inicial — útil para conversaciones recién creadas que aún
  *  no fueron inicializadas por su agente. */
 export type EmptyConversationState = Record<string, never>;
@@ -81,6 +122,8 @@ export type EmptyConversationState = Record<string, never>;
  *  Las funciones consumidoras deben hacer narrow con type guards. */
 export type ConversationState =
   | FeedbackConversationState
+  | InfoConversationState
+  | IntakeConversationState
   | EmptyConversationState;
 
 // -----------------------------------------------------------------------------
@@ -193,6 +236,21 @@ export interface FeedbackAnswerRow {
   answered_at: string;
 }
 
+export interface ServiceIntakeRequestRow {
+  id: string;
+  conversation_id: string;
+  customer_id: string;
+  requested_name: string;
+  requested_phone: string;
+  raw_request_description: string | null;
+  status: IntakeRequestStatus;
+  assigned_to_profile_id: string | null;
+  service_job_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProfileRow {
   id: string;
   email: string | null;
@@ -215,4 +273,18 @@ export function isFeedbackState(
     "current_question" in state &&
     Array.isArray((state as FeedbackConversationState).answers)
   );
+}
+
+export function isInfoState(
+  state: ConversationState | null | undefined,
+): state is InfoConversationState {
+  if (!state || typeof state !== "object") return false;
+  return (state as InfoConversationState).kind === "info";
+}
+
+export function isIntakeState(
+  state: ConversationState | null | undefined,
+): state is IntakeConversationState {
+  if (!state || typeof state !== "object") return false;
+  return (state as IntakeConversationState).kind === "intake";
 }

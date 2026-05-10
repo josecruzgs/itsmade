@@ -8,6 +8,7 @@ import { UserMenu } from "@/components/UserMenu";
 
 const links = [
   { href: "/services", label: "Servicios" },
+  { href: "/intake", label: "Solicitudes" },
   { href: "/clients", label: "Clientes" },
   { href: "/feedback", label: "Feedback" },
   { href: "/conversations", label: "Conversaciones" },

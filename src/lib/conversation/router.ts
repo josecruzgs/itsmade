@@ -25,10 +25,13 @@ export async function handleInboundMessage(msg: InboundMessage): Promise<void> {
   const evo = evolutionClient();
   const numberJid = `${msg.fromPhone}@s.whatsapp.net`;
 
+  // Default a 'info' (concierge para preguntas generales). Cuando el admin
+  // dispara "Solicitar feedback", la action sobreescribe a 'feedback' con el
+  // state inicial correspondiente.
   const conversation = await getOrCreateConversation({
     whatsappPhone: msg.fromPhone,
     pushName: msg.pushName,
-    agentType: "feedback",
+    agentType: "info",
   });
 
   // Idempotencia: si el webhook nos llego dos veces no procesamos otra vez.

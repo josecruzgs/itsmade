@@ -1,5 +1,7 @@
 import type { ConversationRow, AgentType } from "@/lib/supabase/types";
 import { runFeedbackTurn } from "@/lib/agents/feedback/agent";
+import { runInfoTurn } from "@/lib/agents/info/agent";
+import { runIntakeTurn } from "@/lib/agents/intake/agent";
 
 export type { AgentType };
 
@@ -29,6 +31,8 @@ export type AgentHandler = (input: AgentRunInput) => Promise<AgentRunResult>;
  */
 export const agentRegistry: Record<AgentType, AgentHandler> = {
   feedback: runFeedbackTurn,
+  info: runInfoTurn,
+  intake: runIntakeTurn,
 };
 
 export function dispatchAgent(agentType: string): AgentHandler {

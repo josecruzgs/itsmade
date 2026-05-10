@@ -34,7 +34,7 @@ export async function getOrCreateConversation(opts: {
   initialState?: ConversationState;
 }): Promise<ConversationRow> {
   const sb = supabaseServer();
-  const agentType: AgentType = opts.agentType ?? "feedback";
+  const agentType: AgentType = opts.agentType ?? "info";
 
   // Upsert ligero del cliente.
   const { data: customer } = await sb

@@ -9,7 +9,13 @@ import type { ConversationState } from "@/lib/supabase/types";
 
 /**
  * Reactiva una conversacion escalada para que el bot vuelva a atenderla.
- * Limpia el flag handoff del state si existe y deja status='active'.
+ * Resetea agent_type a 'info' y state a `{ kind: 'info', turns: [...] }`,
+ * preservando el historial de turns que se haya capturado.
+ *
+ * Por que resetear: si la conversacion fue escalada desde un intake completado,
+ * agent_type quedo en 'info' y state en intake-shape; si fue desde feedback
+ * escalado, ambas en feedback. Al reactivar, el bot debe poder responder dudas
+ * generales del cliente, no continuar el flujo previo.
  */
 export async function reactivateBot(formData: FormData): Promise<void> {
   await requireAuth();
@@ -25,16 +31,18 @@ export async function reactivateBot(formData: FormData): Promise<void> {
     .single();
   if (!conv) return;
 
-  // Limpia handoff sin pisar el resto del state (puede ser cualquier shape de agente).
+  // Preservar turns si existen (historial conversacional). Discartar resto del state.
   const currentState = (conv.state ?? {}) as Record<string, unknown>;
+  const turns = Array.isArray(currentState.turns) ? currentState.turns : [];
   const newState: ConversationState = {
-    ...currentState,
+    kind: "info",
     handoff: null,
+    turns,
   } as ConversationState;
 
   await sb
     .from("conversations")
-    .update({ status: "active", state: newState })
+    .update({ status: "active", agent_type: "info", state: newState })
     .eq("id", id);
 
   revalidatePath("/conversations");
