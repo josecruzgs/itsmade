@@ -230,25 +230,7 @@ export function SettingsEvolution({ initial }: { initial: EvolutionStatus }) {
               : "Sincronizado"}
         </span>
         <div className="flex flex-wrap gap-2">
-          <a
-            href={status.managerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-ghost text-xs"
-          >
-            Abrir Evolution Manager
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <path d="M7 7h10v10M7 17 17 7" />
-            </svg>
-          </a>
+        
           <button
             type="button"
             onClick={refresh}
