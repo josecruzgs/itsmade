@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { env } from "@/lib/env";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth/session";
+import { normalizeMxWhatsApp } from "@/lib/util/phone";
 import type { ActionResult } from "@/lib/auth/actions";
 import type { ServiceJobStatus } from "@/lib/supabase/types";
 
@@ -24,13 +25,18 @@ const formSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => v || null),
-  customer_whatsapp: z
-    .string()
-    .transform((v) => v.replace(/\D/g, ""))
-    .refine(
-      (v) => v.length >= 10 && v.length <= 15,
-      "WhatsApp inválido (10-15 dígitos)",
-    ),
+  customer_whatsapp: z.string().transform((v, ctx) => {
+    const norm = normalizeMxWhatsApp(v);
+    if (!norm) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "WhatsApp inválido. Usa 10 dígitos (ej: 6861234567) o el formato completo +52 1 ...",
+      });
+      return z.NEVER;
+    }
+    return norm;
+  }),
   customer_email: z
     .union([z.string().trim().email("Email inválido"), z.literal("")])
     .optional()

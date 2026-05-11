@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth/session";
+import { normalizeMxWhatsApp } from "@/lib/util/phone";
 import type { ActionResult } from "@/lib/auth/actions";
 
 const employeeSchema = z.object({
@@ -22,13 +23,18 @@ const employeeSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => v || null),
-  whatsapp_phone: z
-    .string()
-    .transform((v) => v.replace(/\D/g, ""))
-    .refine(
-      (v) => v.length >= 10 && v.length <= 15,
-      "WhatsApp invalido (10-15 digitos)",
-    ),
+  whatsapp_phone: z.string().transform((v, ctx) => {
+    const norm = normalizeMxWhatsApp(v);
+    if (!norm) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "WhatsApp invalido. Usa 10 digitos (ej: 6861234567) o el formato completo +52 1 ...",
+      });
+      return z.NEVER;
+    }
+    return norm;
+  }),
   notes: z
     .string()
     .trim()

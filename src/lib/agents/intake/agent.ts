@@ -19,6 +19,7 @@ import {
   emptyIntakeState,
   injectStateContext,
 } from "@/lib/agents/intake/state";
+import { normalizeMxWhatsApp } from "@/lib/util/phone";
 
 const log = createLogger("intake-agent");
 const MAX_TOOL_ITERATIONS = 6;
@@ -166,13 +167,6 @@ async function executeTool(ctx: ToolExecCtx): Promise<ToolExecResult> {
   }
 }
 
-function normalizePhone(raw: string): string {
-  const trimmed = raw.trim();
-  const keepPlus = trimmed.startsWith("+");
-  const digits = trimmed.replace(/\D/g, "");
-  return keepPlus ? `+${digits}` : digits;
-}
-
 async function executeRecordField(ctx: ToolExecCtx): Promise<ToolExecResult> {
   const field = String(ctx.input.field ?? "").trim();
   const value = String(ctx.input.value ?? "").trim();
@@ -196,12 +190,15 @@ async function executeRecordField(ctx: ToolExecCtx): Promise<ToolExecResult> {
       ctx.state.current_step = nextStep(ctx.state.current_step);
     }
   } else if (field === "phone") {
-    const normalized = normalizePhone(value);
-    const digitsOnly = normalized.replace(/\D/g, "");
-    if (digitsOnly.length < 10) {
+    // Normalizamos a 521+10 digitos. Si el cliente da 10 digitos pelados
+    // queda como 521xxxxxxxxxx, igual que como Evolution lo registra cuando
+    // entra por webhook. Esto previene duplicados de customers.
+    const normalized = normalizeMxWhatsApp(value);
+    if (!normalized) {
       return {
         toolReturnValue: {
-          error: "phone parece invalido (menos de 10 digitos). Pide aclaracion.",
+          error:
+            "phone parece invalido (espera movil MX de 10 digitos). Pide aclaracion al cliente.",
         },
         isError: true,
       };
@@ -211,7 +208,8 @@ async function executeRecordField(ctx: ToolExecCtx): Promise<ToolExecResult> {
       ctx.state.current_step = nextStep(ctx.state.current_step);
     }
 
-    // Lookup en customers para prellenar matched_customer_id.
+    // Lookup en customers con el formato canonico (siempre va a matchear
+    // si el cliente ya existe, sin importar como lo escribio en WhatsApp).
     const sb = supabaseServer();
     const { data: existing } = await sb
       .from("customers")
