@@ -5,10 +5,15 @@ import { useRouter } from "next/navigation";
 import { sendServicePdfToEmployee } from "@/lib/services/send-pdf";
 import type { EmployeeRow } from "@/lib/supabase/types";
 
+const ICON_BTN_CLASS =
+  "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white";
+
 /**
- * Boton para enviar la hoja de servicio por WhatsApp a un empleado.
- * Abre un modal con el listado de empleados activos. Tras enviar, refresca
- * /services para reflejar la asignacion.
+ * Pareja de botones-icono para una fila de servicio:
+ *   - Descargar PDF (link directo a /api/services/[id]/pdf).
+ *   - Enviar PDF al equipo via WhatsApp:
+ *       · Si el servicio ya tiene empleado asignado -> envia directo sin modal.
+ *       · Si no -> abre modal con picker de empleado.
  */
 export function SendPdfButton({
   serviceJobId,
@@ -17,39 +22,156 @@ export function SendPdfButton({
 }: {
   serviceJobId: string;
   employees: EmployeeRow[];
+  /** Si esta presente, click en Enviar dispara envio directo a ese empleado. */
   currentlyAssignedId?: string | null;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [flash, setFlash] = useState<"success" | null>(null);
 
-  const labelClass = currentlyAssignedId
-    ? "btn-ghost text-xs"
-    : "btn-ghost text-xs";
-  const labelText = currentlyAssignedId ? "Reenviar" : "Enviar PDF";
+  const activeEmployees = employees.filter((e) => e.active);
+
+  // El boton de envio se deshabilita si no hay nadie asignado Y no hay
+  // empleados activos a quien picker.
+  const noEmployeesAtAll = !currentlyAssignedId && activeEmployees.length === 0;
+
+  const sendTitle = noEmployeesAtAll
+    ? "Registra empleados activos en /employees primero"
+    : currentlyAssignedId
+      ? "Reenviar hoja al empleado asignado por WhatsApp"
+      : "Enviar hoja al equipo por WhatsApp (elegir empleado)";
+
+  function handleSendClick() {
+    // Caso 1: ya hay empleado asignado -> envio directo
+    if (currentlyAssignedId) {
+      startTransition(async () => {
+        const res = await sendServicePdfToEmployee({
+          serviceJobId,
+          employeeId: currentlyAssignedId,
+        });
+        if (res.ok) {
+          setFlash("success");
+          setTimeout(() => setFlash(null), 1500);
+          router.refresh();
+        } else {
+          window.alert(res.error ?? "No se pudo enviar.");
+        }
+      });
+      return;
+    }
+    // Caso 2: sin asignar -> abrir modal de seleccion
+    setOpen(true);
+  }
 
   return (
     <>
+      <a
+        href={`/api/services/${serviceJobId}/pdf`}
+        download
+        className={ICON_BTN_CLASS}
+        title="Descargar hoja PDF"
+        aria-label="Descargar hoja PDF"
+      >
+        <DownloadIcon />
+      </a>
+
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className={labelClass}
-        disabled={employees.length === 0}
-        title={
-          employees.length === 0
-            ? "Registra empleados activos en /employees primero"
-            : "Enviar hoja PDF al equipo por WhatsApp"
-        }
+        onClick={handleSendClick}
+        className={ICON_BTN_CLASS}
+        disabled={noEmployeesAtAll || pending}
+        title={sendTitle}
+        aria-label={sendTitle}
       >
-        {labelText}
+        {pending ? <SpinnerIcon /> : flash === "success" ? <CheckIcon /> : <SendIcon />}
       </button>
+
       {open ? (
         <SendPdfModal
           serviceJobId={serviceJobId}
-          employees={employees}
+          employees={activeEmployees}
           currentlyAssignedId={currentlyAssignedId}
           onClose={() => setOpen(false)}
         />
       ) : null}
     </>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="animate-spin"
+      aria-hidden
+    >
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-emerald-600 dark:text-emerald-400"
+      aria-hidden
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
 

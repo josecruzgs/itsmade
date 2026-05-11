@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "itsMade — Servicios profesionales de limpieza",
   description:
     "Plataforma de gestión y feedback automatizado por WhatsApp para servicios profesionales de limpieza itsMade.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 // Inline pre-hydration script para aplicar el tema sin parpadeo (FOUC).

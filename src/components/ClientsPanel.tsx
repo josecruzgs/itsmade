@@ -9,6 +9,7 @@ import {
 import { ClientDetailModal } from "@/components/ClientDetailModal";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceRow,
 } from "@/lib/supabase/types";
@@ -29,11 +30,13 @@ export function ClientsPanel({
   branches,
   categories,
   services,
+  employees,
 }: {
   clients: ClientRow[];
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
+  employees: EmployeeRow[];
 }) {
   const router = useRouter();
   const [creatingFor, setCreatingFor] =
@@ -145,6 +148,7 @@ export function ClientsPanel({
           branches={branches}
           categories={categories}
           services={services}
+          employees={employees}
           onClose={() => {
             setCreatingFor(null);
             router.refresh();

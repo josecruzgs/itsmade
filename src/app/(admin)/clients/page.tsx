@@ -4,6 +4,7 @@ import { ClientsPanel, type ClientRow } from "@/components/ClientsPanel";
 import { supabaseServer } from "@/lib/supabase/server";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceRow,
 } from "@/lib/supabase/types";
@@ -54,17 +55,19 @@ export default async function ClientsPage({
     );
   }
 
-  const [customersRes, branchesRes, categoriesRes, servicesRes] =
+  const [customersRes, branchesRes, categoriesRes, servicesRes, employeesRes] =
     await Promise.all([
       customersQuery,
       sb.from("branches").select("*").order("city"),
       sb.from("service_categories").select("*").order("slug"),
       sb.from("services").select("*").order("code"),
+      sb.from("employees").select("*").order("full_name"),
     ]);
 
   const branches = (branchesRes.data ?? []) as BranchRow[];
   const categories = (categoriesRes.data ?? []) as ServiceCategoryRow[];
   const services = (servicesRes.data ?? []) as ServiceRow[];
+  const employees = (employeesRes.data ?? []) as EmployeeRow[];
 
   type CustomerWithJobs = {
     id: string;
@@ -165,6 +168,7 @@ export default async function ClientsPage({
         branches={branches}
         categories={categories}
         services={services}
+        employees={employees}
       />
 
       {totalCount > PAGE_SIZE ? (

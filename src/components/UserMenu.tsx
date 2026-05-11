@@ -8,10 +8,15 @@ export function UserMenu({
   email,
   role,
   fullName,
+  placement = "bottom",
 }: {
   email: string;
   role: "admin" | "user";
   fullName: string | null;
+  /** Direccion en que se abre el dropdown relativo al boton.
+   *  'bottom' (default) abre hacia abajo. 'top' abre hacia arriba — util
+   *  cuando el boton esta cerca del borde inferior del viewport. */
+  placement?: "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -54,7 +59,11 @@ export function UserMenu({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 animate-fade-in rounded-xl border border-slate-200 bg-white p-2 shadow-nav dark:border-slate-800 dark:bg-slate-900">
+        <div
+          className={`absolute right-0 z-50 w-64 animate-fade-in rounded-xl border border-slate-200 bg-white p-2 shadow-nav dark:border-slate-800 dark:bg-slate-900 ${
+            placement === "top" ? "bottom-full mb-2" : "top-full mt-2"
+          }`}
+        >
           <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
             <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
               {fullName ?? email}

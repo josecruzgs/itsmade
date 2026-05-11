@@ -167,6 +167,7 @@ export function ServicesPanel({
           branches={branches}
           categories={categories}
           services={services}
+          employees={employees}
           onClose={() => {
             setEditing(null);
             router.refresh();
@@ -304,6 +305,7 @@ export function ServiceJobModal({
   branches,
   categories,
   services,
+  employees,
   onClose,
 }: {
   job: ServiceJobJoined | null;
@@ -317,6 +319,7 @@ export function ServiceJobModal({
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
+  employees: EmployeeRow[];
   onClose: () => void;
 }) {
   const isNew = job === null;
@@ -408,6 +411,18 @@ export function ServiceJobModal({
     }
     return filtered;
   }, [branches, job?.branch?.id]);
+
+  // Empleados visibles en el select: activos + el asignado actual (aunque
+  // este inactivo) para no perder la asignacion accidentalmente al editar.
+  const currentlyAssignedId = job?.assigned_employee_id ?? "";
+  const visibleEmployees = useMemo(() => {
+    const active = employees.filter((e) => e.active);
+    if (currentlyAssignedId && !active.some((e) => e.id === currentlyAssignedId)) {
+      const current = employees.find((e) => e.id === currentlyAssignedId);
+      if (current) return [...active, current];
+    }
+    return active;
+  }, [employees, currentlyAssignedId]);
 
   return (
     <div
@@ -617,6 +632,33 @@ export function ServiceJobModal({
                 </select>
               </label>
             </div>
+          </Section>
+
+          {/* === ASIGNACIÓN === */}
+          <Section title="Asignación al equipo">
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Empleado responsable
+              </span>
+              <select
+                name="assigned_employee_id"
+                defaultValue={currentlyAssignedId}
+                className="field"
+              >
+                <option value="">Sin asignar</option>
+                {visibleEmployees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.full_name}
+                    {emp.position ? ` — ${emp.position}` : ""}
+                    {emp.area ? ` (${emp.area})` : ""}
+                    {!emp.active ? " · inactivo" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                Quien va a ejecutar el servicio. Si dejas en &quot;Sin asignar&quot;, podrás elegirlo al enviar la hoja PDF.
+              </span>
+            </label>
           </Section>
 
           {/* === NOTAS === */}

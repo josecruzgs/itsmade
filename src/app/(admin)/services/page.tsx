@@ -121,11 +121,10 @@ export default async function ServicesPage({
     sb.from("branches").select("*").order("city"),
     sb.from("service_categories").select("*").order("slug"),
     sb.from("services").select("*").order("code"),
-    sb
-      .from("employees")
-      .select("*")
-      .eq("active", true)
-      .order("full_name"),
+    // Cargamos TODOS los empleados (no solo activos) para que el modal pueda
+    // mostrar la asignacion actual aunque el empleado este inactivo. Cada
+    // consumidor filtra a activos donde aplique (ej: el picker de SendPdf).
+    sb.from("employees").select("*").order("full_name"),
     (() => {
       let q = sb
         .from("service_jobs")
@@ -230,6 +229,7 @@ export default async function ServicesPage({
           branches={branches}
           categories={categories}
           services={services}
+          employees={employees}
         />
       }
     >

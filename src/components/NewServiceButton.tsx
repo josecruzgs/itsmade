@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ServiceJobModal } from "@/components/ServicesPanel";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceRow,
 } from "@/lib/supabase/types";
@@ -18,10 +19,12 @@ export function NewServiceButton({
   branches,
   categories,
   services,
+  employees,
 }: {
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
+  employees: EmployeeRow[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -45,6 +48,7 @@ export function NewServiceButton({
           branches={branches}
           categories={categories}
           services={services}
+          employees={employees}
           onClose={() => {
             setOpen(false);
             router.refresh();

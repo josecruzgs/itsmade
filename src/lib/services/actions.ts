@@ -68,6 +68,16 @@ const formSchema = z.object({
     .or(z.literal(""))
     .transform((v) => v || null),
   status: z.enum(STATUS_VALUES).default("scheduled"),
+  assigned_employee_id: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => v || null)
+    .refine(
+      (v) => v === null || /^[0-9a-f-]{36}$/i.test(v),
+      "Empleado invalido",
+    ),
 });
 
 function parseForm(formData: FormData) {
@@ -83,6 +93,7 @@ function parseForm(formData: FormData) {
     scheduled_at: formData.get("scheduled_at") ?? "",
     notes: formData.get("notes") ?? "",
     status: formData.get("status") ?? "scheduled",
+    assigned_employee_id: formData.get("assigned_employee_id") ?? "",
   });
 }
 
@@ -139,6 +150,7 @@ export async function createServiceJob(
       scheduled_at: data.scheduled_at,
       status: data.status,
       completed_at,
+      assigned_employee_id: data.assigned_employee_id,
     })
     .select("id")
     .single();
@@ -229,6 +241,7 @@ export async function updateServiceJob(
       scheduled_at: data.scheduled_at,
       status: data.status,
       completed_at,
+      assigned_employee_id: data.assigned_employee_id,
     })
     .eq("id", id);
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ServiceJobModal } from "@/components/ServicesPanel";
 import type {
   BranchRow,
+  EmployeeRow,
   ServiceCategoryRow,
   ServiceRow,
 } from "@/lib/supabase/types";
@@ -32,6 +33,7 @@ export function IntakeConvertButton({
   branches,
   categories,
   services,
+  employees,
   className = "btn-primary w-full text-xs",
   label = "Convertir a servicio",
 }: {
@@ -39,6 +41,7 @@ export function IntakeConvertButton({
   branches: BranchRow[];
   categories: ServiceCategoryRow[];
   services: ServiceRow[];
+  employees: EmployeeRow[];
   className?: string;
   label?: string;
 }) {
@@ -64,6 +67,7 @@ export function IntakeConvertButton({
           branches={branches}
           categories={categories}
           services={services}
+          employees={employees}
           onClose={() => {
             setOpen(false);
             router.refresh();

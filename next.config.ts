@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   // bundle de la function y `readFileSync` falla en produccion.
   outputFileTracingIncludes: {
     "/api/webhook/evolution": ["./src/lib/agents/info/company-knowledge.md"],
+    // El logo se embebe en el PDF de hoja de servicio. Lo necesitan tanto
+    // la API de descarga como el server action de envio por WhatsApp (que
+    // se bundle con la pagina /services).
+    "/api/services/[id]/pdf": ["./public/logo.png"],
+    "/services": ["./public/logo.png"],
   },
   experimental: {
     serverActions: {
