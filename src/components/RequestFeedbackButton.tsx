@@ -7,9 +7,9 @@ import type { ActionResult } from "@/lib/auth/actions";
 
 interface Props {
   serviceJobId: string;
-  /** Si ya hay una solicitud abierta para este job, deshabilita el boton. */
+  /** Si ya hay una solicitud abierta para este job, oculta el boton. */
   hasOpenRequest?: boolean;
-  /** Si ya hay feedback completado, opcionalmente permite re-solicitar. */
+  /** Si ya hay feedback completado para este job, oculta el boton. */
   hasCompletedRequest?: boolean;
 }
 
@@ -34,9 +34,9 @@ export function RequestFeedbackButton({
     }
   }, [state, router]);
 
-  if (hasOpenRequest) {
-    // El estado "En curso" se muestra en la columna "Feedback" de la tabla;
-    // aqui en Acciones no renderizamos boton para evitar disparar duplicados.
+  if (hasOpenRequest || hasCompletedRequest) {
+    // hasOpenRequest: el estado "En curso" se muestra en la columna "Feedback".
+    // hasCompletedRequest: el ticket de feedback ya quedó cerrado, no se re-solicita.
     return null;
   }
 
@@ -60,11 +60,7 @@ export function RequestFeedbackButton({
         >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        {isPending
-          ? "Enviando…"
-          : hasCompletedRequest
-            ? "Solicitar de nuevo"
-            : "Solicitar feedback"}
+        {isPending ? "Enviando…" : "Solicitar feedback"}
       </button>
       {state && !state.ok ? (
         <span className="max-w-[280px] text-right text-xs text-red-600 dark:text-red-400">

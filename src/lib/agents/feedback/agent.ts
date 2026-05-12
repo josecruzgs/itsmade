@@ -17,6 +17,7 @@ import type {
 import { FEEDBACK_QUESTIONS } from "@/lib/agents/feedback/types";
 import { feedbackTools } from "@/lib/agents/feedback/tools";
 import { FEEDBACK_SYSTEM_PROMPT } from "@/lib/agents/feedback/prompt";
+import { buildFeedbackSummary } from "@/lib/agents/feedback/summary";
 import {
   isFeedbackState,
   injectStateContext,
@@ -355,6 +356,9 @@ async function executeFinalizeFeedback(ctx: ToolExecCtx): Promise<ToolExecResult
   const sb = supabaseServer();
   const nowIso = new Date().toISOString();
 
+  // Resumen generado por LLM. Falla silenciosa: si truena, summary queda null.
+  const summary = await buildFeedbackSummary(ctx.state);
+
   const { error: frErr } = await sb
     .from("feedback_requests")
     .update({
@@ -362,6 +366,8 @@ async function executeFinalizeFeedback(ctx: ToolExecCtx): Promise<ToolExecResult
       completed_at: nowIso,
       score_overall_avg: scoreOverallAvg,
       nps_bucket: npsBucket,
+      summary,
+      summary_generated_at: summary ? nowIso : null,
     })
     .eq("id", ctx.state.feedback_request_id);
   if (frErr) {

@@ -19,22 +19,22 @@ export interface FeedbackQuestionDef {
 export const FEEDBACK_QUESTIONS: readonly FeedbackQuestionDef[] = [
   {
     index: 1,
-    text: "¿Cómo calificarías el servicio en general, del 1 al 5?",
+    text: "¿Cómo calificarías el servicio en general, del 1 al 5? (1 = nada satisfecho, 5 = totalmente satisfecho)",
     kind: "rating",
   },
   {
     index: 2,
-    text: "¿Qué tan puntual fue el equipo? (1 al 5)",
+    text: "¿Qué tan puntual fue el equipo? (1 = nada satisfecho, 5 = totalmente satisfecho)",
     kind: "rating",
   },
   {
     index: 3,
-    text: "¿Cómo evalúas la calidad de la limpieza? (1 al 5)",
+    text: "¿Cómo evalúas la calidad de la limpieza? (1 = nada satisfecho, 5 = totalmente satisfecho)",
     kind: "rating",
   },
   {
     index: 4,
-    text: "¿Qué tal el trato del personal? (1 al 5)",
+    text: "¿Qué tal el trato del personal? (1 = nada satisfecho, 5 = totalmente satisfecho)",
     kind: "rating",
   },
   {

@@ -236,6 +236,8 @@ export interface FeedbackRequestRow {
   sent_at: string | null;
   completed_at: string | null;
   expired_at: string | null;
+  summary: string | null;
+  summary_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }
