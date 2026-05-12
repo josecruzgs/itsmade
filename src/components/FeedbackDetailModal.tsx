@@ -52,6 +52,12 @@ const npsClass: Record<NpsBucket, string> = {
     "badge bg-red-50 text-red-700 ring-1 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
 };
 
+const npsLabel: Record<NpsBucket, string> = {
+  promoter: "Muy satisfecho",
+  passive: "Satisfecho",
+  detractor: "Insatisfecho",
+};
+
 const QUESTION_LABELS: Record<number, string> = {
   1: "General",
   2: "Puntualidad",
@@ -143,7 +149,9 @@ export function FeedbackDetailModal({
                   <span className="text-xs text-slate-400">—</span>
                 )}
                 {row.nps_bucket ? (
-                  <span className={npsClass[row.nps_bucket]}>{row.nps_bucket}</span>
+                  <span className={npsClass[row.nps_bucket]}>
+                    {npsLabel[row.nps_bucket]}
+                  </span>
                 ) : null}
               </div>
             }

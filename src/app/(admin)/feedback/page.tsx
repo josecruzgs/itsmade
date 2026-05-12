@@ -74,9 +74,9 @@ export default async function FeedbackPage() {
           avgScore={summary.avgScore}
           count={summary.scoredCount}
         />
-        <SummaryCard label="Promotores" value={summary.promoter} tone="success" />
-        <SummaryCard label="Pasivos" value={summary.passive} tone="warning" />
-        <SummaryCard label="Detractores" value={summary.detractor} tone="danger" />
+        <SummaryCard label="Muy satisfechos" value={summary.promoter} tone="success" />
+        <SummaryCard label="Satisfechos" value={summary.passive} tone="warning" />
+        <SummaryCard label="Insatisfechos" value={summary.detractor} tone="danger" />
         <SummaryCard label="Pendientes" value={summary.pending} tone="neutral" />
         <SummaryCard label="Expirados" value={summary.expired} tone="neutral" />
       </div>

@@ -32,6 +32,12 @@ const npsClass: Record<NpsBucket, string> = {
     "badge bg-red-50 text-red-700 ring-1 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
 };
 
+const npsLabel: Record<NpsBucket, string> = {
+  promoter: "Muy satisfecho",
+  passive: "Satisfecho",
+  detractor: "Insatisfecho",
+};
+
 export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const openRow = openId ? rows.find((r) => r.id === openId) ?? null : null;
@@ -95,7 +101,9 @@ export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
                   </td>
                   <td className="px-4 py-3">
                     {r.nps_bucket ? (
-                      <span className={npsClass[r.nps_bucket]}>{r.nps_bucket}</span>
+                      <span className={npsClass[r.nps_bucket]}>
+                        {npsLabel[r.nps_bucket]}
+                      </span>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
                     )}
