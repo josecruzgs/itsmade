@@ -21,6 +21,7 @@ export interface FeedbackDetailRow {
   created_at: string;
   summary: string | null;
   summary_generated_at: string | null;
+  analyzed_in_report_id: string | null;
   customer: Pick<CustomerRow, "id" | "name" | "whatsapp_phone"> | null;
   branch: Pick<BranchRow, "id" | "name" | "city"> | null;
   service: Pick<ServiceRow, "id" | "name" | "code"> | null;

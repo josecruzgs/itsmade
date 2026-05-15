@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { FeedbackRequestStatus, NpsBucket } from "@/lib/supabase/types";
 import {
@@ -55,6 +56,7 @@ export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
                 <th className="px-4 py-3 font-medium">Estado</th>
                 <th className="px-4 py-3 font-medium">Score</th>
                 <th className="px-4 py-3 font-medium">NPS</th>
+                <th className="px-4 py-3 font-medium">Análisis</th>
                 <th className="px-4 py-3 font-medium">Completado</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
@@ -108,6 +110,12 @@ export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    <AnalyzedChip
+                      status={r.status}
+                      reportId={r.analyzed_in_report_id}
+                    />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                     {r.completed_at
                       ? new Date(r.completed_at).toLocaleString("es-MX")
@@ -134,7 +142,7 @@ export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-slate-500 dark:text-slate-400"
                   >
                     Aún no hay solicitudes de feedback. Ve a /services y presiona
@@ -152,4 +160,30 @@ export function FeedbackTable({ rows }: { rows: FeedbackDetailRow[] }) {
       ) : null}
     </>
   );
+}
+
+function AnalyzedChip({
+  status,
+  reportId,
+}: {
+  status: FeedbackRequestStatus;
+  reportId: string | null;
+}) {
+  // Solo aplica a feedback completado — los demas estados no son analizables.
+  if (status !== "completed") {
+    return <span className="text-xs text-slate-400">—</span>;
+  }
+  if (reportId) {
+    return (
+      <Link
+        href={`/recommendations#report-${reportId}`}
+        onClick={(e) => e.stopPropagation()}
+        className="badge-success transition hover:underline"
+        title="Ver reporte de mejoras"
+      >
+        Analizado
+      </Link>
+    );
+  }
+  return <span className="badge-neutral">Sin analizar</span>;
 }

@@ -42,6 +42,8 @@ export type IntakeRequestStatus =
 
 export type NpsBucket = "promoter" | "passive" | "detractor";
 
+export type ImprovementReportStatus = "pending" | "applied";
+
 export type UserRole = "admin" | "user";
 
 export type ServiceCategorySlug = "residencial" | "comercial" | "industrial";
@@ -238,8 +240,21 @@ export interface FeedbackRequestRow {
   expired_at: string | null;
   summary: string | null;
   summary_generated_at: string | null;
+  analyzed_in_report_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ImprovementReportRow {
+  id: string;
+  generated_at: string;
+  generated_by_profile_id: string | null;
+  feedback_count: number;
+  report_markdown: string;
+  status: ImprovementReportStatus;
+  applied_at: string | null;
+  applied_by_profile_id: string | null;
+  applied_notes: string | null;
 }
 
 export interface FeedbackAnswerRow {

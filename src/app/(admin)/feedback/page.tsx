@@ -15,7 +15,7 @@ export default async function FeedbackPage() {
       `
       id, status, score_overall_avg, nps_bucket,
       sent_at, completed_at, expired_at, created_at,
-      summary, summary_generated_at,
+      summary, summary_generated_at, analyzed_in_report_id,
       customer:customers!feedback_requests_customer_id_fkey(id, name, whatsapp_phone),
       branch:branches!feedback_requests_branch_id_fkey(id, name, city),
       service:services!feedback_requests_service_id_fkey(id, name, code),

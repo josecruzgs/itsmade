@@ -31,13 +31,17 @@ node scripts/create-admin.mjs <email> <password> [full_name]   # Create admin us
 
 ## Architecture
 
-itsMade is a WhatsApp-first platform for a Mexican professional cleaning services company. **Evolution API** (self-hosted Baileys) is the WhatsApp gateway; every inbound message is dispatched to one of three **Anthropic Claude** agents based on `conversations.agent_type`:
+itsMade is a WhatsApp-first platform for a Mexican professional cleaning services company. **Evolution API** (self-hosted Baileys) is the WhatsApp gateway; every inbound message is dispatched to one of three **conversational Anthropic Claude** agents based on `conversations.agent_type`:
 
 - **`info`** — default for cold contacts. Concierge that answers questions using `src/lib/agents/info/company-knowledge.md`. Calls `start_intake` to switch the conversation to the intake agent when the customer clearly wants to hire/quote.
 - **`intake`** — collects `name → phone → description` step by step; `finalize_intake` inserts into `service_intake_requests` (status `pending_review`), upserts the customer, and escalates the conversation for human follow-up.
 - **`feedback`** — post-service rating bot. Admin clicks **"Solicitar feedback"** on `/services`; the bot asks 5 rating questions, normalizes free-form answers ("muy bien", "10/10", "regular") to 1-5 scores, persists to **Supabase**, and computes an average + NPS bucket.
 
 Agents can transfer mid-conversation by updating `conversations.agent_type` + `state` in DB (see `info.start_intake`). When this happens, the calling agent **skips its final `saveConversationState`** so the switch isn't overwritten — the next inbound message reaches the new agent with the fresh state.
+
+There is also one **batch (non-conversational) agent**, which lives under `src/lib/agents/` for folder convention but bypasses the registry entirely:
+
+- **`recommendations`** — batch analyzer triggered by an admin button on `/recommendations`. Reads all `feedback_requests` where `status='completed'` AND `analyzed_in_report_id IS NULL`, sends the bundle to Claude in a single message (no tools, no loop), and persists the markdown report into `improvement_reports` (status `pending`/`applied`). Analyzed rows get `analyzed_in_report_id` set, which drives the **"Analizado / Sin analizar"** chip on `/feedback`. Admin marks the whole report as applied (no per-item granularity). This agent has **no entry in `agentRegistry`**, is **not in `AgentType`**, and never appears in `conversations` rows — see "Two agent shapes" below.
 
 ### Deployment topology (hybrid)
 
@@ -56,9 +60,16 @@ The VPS may be **shared with TomaLab**: itsMade uses port 8082 (TomaLab uses 808
 
 The router (`src/lib/conversation/router.ts`) handles idempotency (`messages.evolution_message_id` UNIQUE — duplicate inbound is silently dropped) and human handoff (status `escalated` → bot does NOT respond, only logs the inbound). It then dispatches via the **agent registry**.
 
-### Agent registry (extensible)
+### Two agent shapes: conversational vs batch
 
-`src/lib/agents/registry.ts` is the dispatcher. To add a new agent:
+- **Conversational** (`feedback`, `info`, `intake`): driven by inbound WhatsApp messages via the webhook → router → `agentRegistry`. State persists across turns in `conversations.state` jsonb. Has tools, tool-use loop, and an `agent_type` discriminator in DB.
+- **Batch** (`recommendations`): triggered by an explicit admin server action. Reads a snapshot of rows, calls Claude once (no tools, no loop), persists output to its own table. **Not in `agentRegistry`**, **not in `AgentType`**, no row in `conversations` for it. Lives under `src/lib/agents/<name>/` for folder convention only — the only shared infra it uses is `_shared/anthropic.ts` (client singleton + `MODELS` lookup).
+
+When deciding which shape: if the agent reacts to a customer message, it's conversational. If it processes a queue of data on demand, it's batch. The instructions in the next section apply ONLY to conversational agents.
+
+### Agent registry (extensible) — conversational only
+
+`src/lib/agents/registry.ts` is the dispatcher. To add a new conversational agent:
 
 1. Create `src/lib/agents/<name>/` with these 5 files:
    - `agent.ts` — exports `runXxxTurn: AgentHandler` (tool-use loop)

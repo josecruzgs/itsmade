@@ -24,6 +24,8 @@ export const MODELS = {
   feedback: () => env().ANTHROPIC_MODEL,
   info: () => process.env.ANTHROPIC_INFO_MODEL ?? env().ANTHROPIC_MODEL,
   intake: () => process.env.ANTHROPIC_INTAKE_MODEL ?? env().ANTHROPIC_MODEL,
+  recommendations: () =>
+    process.env.ANTHROPIC_RECOMMENDATIONS_MODEL ?? env().ANTHROPIC_MODEL,
 } as const;
 
 export function resetAnthropicCache(): void {
